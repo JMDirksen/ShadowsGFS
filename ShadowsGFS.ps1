@@ -12,9 +12,7 @@
 if ($Drive.Length -eq 1) { $Drive = $Drive + ":" }
 if ($Drive -notmatch "^[a-z]:$") { throw "Invalid drive `"$Drive`"" }
 
-
 # Build list of shadow copies
-
 [array] $output = vssadmin list shadows /for=$Drive
 $shadows = [System.Collections.ArrayList]@()
 $shadow = @{}
@@ -39,76 +37,78 @@ if ($shadow.id) {
 }
 
 # Keep last x copies
-foreach($x in -$KeepLast..-1) {
-    $shadows[$x].delete = $false
-    $shadows[$x].why += "L"
+for ($x = -$KeepLast; $x -lt 0; $x++) {
+    if ($shadows[$x]) {
+        $shadows[$x].delete = $false
+        $shadows[$x].why += "L"
+    }
 }
 
 # Keep last x hourly copies
-for($x = 0; $x -gt -$KeepHourly; $x--) {
+for ($x = 0; $x -gt -$KeepHourly; $x--) {
     $now = Get-Date
     $from = (Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour $now.Hour -Minute 0 -Second 0).AddHours($x)
     $to = $from.AddHours(1)
-    foreach($s in 0..($shadows.Count-1)) {
-        if ($from -le $shadows[$s].datetime -and $shadows[$s].datetime -lt $to) {
-            $shadows[$s].delete = $false
-            $shadows[$s].why += "H"
+    foreach ($s in $shadows) {
+        if ($from -le $s.datetime -and $s.datetime -lt $to) {
+            $s.delete = $false
+            $s.why += "H"
             break
         }
     }
 }
 
 # Keep last x daily copies
-for($x = 0; $x -gt -$KeepDaily; $x--) {
+for ($x = 0; $x -gt -$KeepDaily; $x--) {
     $now = Get-Date
     $from = (Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour 0 -Minute 0 -Second 0).AddDays($x)
     $to = $from.AddDays(1)
-    foreach($s in 0..($shadows.Count-1)) {
-        if ($from -le $shadows[$s].datetime -and $shadows[$s].datetime -lt $to) {
-            $shadows[$s].delete = $false
-            $shadows[$s].why += "D"
+    foreach ($s in $shadows) {
+        if ($from -le $s.datetime -and $s.datetime -lt $to) {
+            $s.delete = $false
+            $s.why += "D"
             break
         }
     }
 }
 
 # Keep last x weekly copies
-for($x = 0; $x -gt -$KeepWeekly; $x--) {
+for ($x = 0; $x -gt -$KeepWeekly; $x--) {
     $now = Get-Date
     $from = (Get-Date -Year $now.Year -Month $now.Month -Day $now.Day -Hour 0 -Minute 0 -Second 0).AddDays(-$now.DayOfWeek.value__+1).AddDays($x*7)
     $to = $from.AddDays(7)
-    foreach($s in 0..($shadows.Count-1)) {
-        if ($from -le $shadows[$s].datetime -and $shadows[$s].datetime -lt $to) {
-            $shadows[$s].delete = $false
-            $shadows[$s].why += "W"
+    foreach ($s in $shadows) {
+        if ($from -le $s.datetime -and $s.datetime -lt $to) {
+            $s.delete = $false
+            $s.why += "W"
             break
         }
     }
 }
 
 # Keep last x monthly copies
-for($x = 0; $x -gt -$KeepMonthly; $x--) {
+for ($x = 0; $x -gt -$KeepMonthly; $x--) {
     $now = Get-Date
     $from = (Get-Date -Year $now.Year -Month $now.Month -Day 1 -Hour 0 -Minute 0 -Second 0).AddMonths($x)
     $to = $from.AddMonths(1)
-    foreach($s in 0..($shadows.Count-1)) {
-        if ($from -le $shadows[$s].datetime -and $shadows[$s].datetime -lt $to) {
-            $shadows[$s].delete = $false
-            $shadows[$s].why += "M"
+    foreach ($s in $shadows) {
+        if ($from -le $s.datetime -and $s.datetime -lt $to) {
+            $s.delete = $false
+            $s.why += "M"
             break
         }
     }
 }
 
 # Keep last x yearly copies
-for($x = 0; $x -gt -$KeepYearly; $x--) {
+for ($x = 0; $x -gt -$KeepYearly; $x--) {
     $now = Get-Date
     $from = (Get-Date -Year $now.Year -Month 1 -Day 1 -Hour 0 -Minute 0 -Second 0).AddYears($x)
     $to = $from.AddYears(1)
-    foreach($s in 0..($shadows.Count-1)) {
-        if ($from -le $shadows[$s].datetime -and $shadows[$s].datetime -lt $to) {
-            $shadows[$s].delete = $false
-            $shadows[$s].why += "Y"
+    foreach ($s in $shadows) {
+        if ($from -le $s.datetime -and $s.datetime -lt $to) {
+            $s.delete = $false
+            $s.why += "Y"
             break
         }
     }
@@ -116,13 +116,15 @@ for($x = 0; $x -gt -$KeepYearly; $x--) {
 
 # Delete shadows
 if ($WhatIf) {
-    $shadows | % { "$($_.id) @ $($_.datetime.ToShortDateString()) $($_.datetime.ToShorttimeString()) -> Delete: $($_.delete) ($($_.why))" }
+    foreach ($s in $shadows) {
+        "$($s.id) @ $($s.datetime.ToShortDateString()) $($s.datetime.ToShorttimeString()) -> Delete: $($s.delete) ($($s.why))"
+    }
 }
 else {
-    $shadows | % {
-        if ($_.delete) {
-            "Deleting shadow copy from $($_.datetime.ToShortDateString()) $($_.datetime.ToShorttimeString())"
-            vssadmin delete shadows /shadow=$($_.id) /quiet | Out-Null
+    foreach ($s in $shadows) {
+        if ($s.delete) {
+            "Deleting shadow copy from $($s.datetime.ToShortDateString()) $($s.datetime.ToShorttimeString())"
+            vssadmin delete shadows /shadow=$($s.id) /quiet | Out-Null
         }
     }
 }
