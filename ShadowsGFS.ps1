@@ -1,11 +1,11 @@
 ﻿param (
-    [String]$Drive = $(Read-Host -Prompt 'Drive'),
-    [Int]$KeepLast = 4,
-    [Int]$KeepHourly = 24,
-    [Int]$KeepDaily = 7,
-    [Int]$KeepWeekly = 4,
-    [Int]$KeepMonthly = 12,
-    [Int]$KeepYearly = 10,
+    [string]$Drive = $(Read-Host -Prompt 'Drive'),
+    [int]$KeepLast = 4,
+    [int]$KeepHourly = 24,
+    [int]$KeepDaily = 7,
+    [int]$KeepWeekly = 4,
+    [int]$KeepMonthly = 12,
+    [int]$KeepYearly = 10,
     [switch]$WhatIf
 )
 
@@ -38,6 +38,7 @@ function Main {
             $shadow.id = $id
             $shadow.datetime = $datetime
             $shadow.delete = $true
+            $shadow.why = [System.Collections.ArrayList]@()
         }
     }
     if ($shadow.id) {
@@ -48,7 +49,7 @@ function Main {
     for ($x = - $KeepLast; $x -lt 0; $x++) {
         if ($shadows[$x]) {
             $shadows[$x].delete = $false
-            $shadows[$x].why += "L"
+            $shadows[$x].why.Add("Last") | Out-Null
         }
     }
 
@@ -60,7 +61,7 @@ function Main {
         foreach ($s in $shadows) {
             if ($from -le $s.datetime -and $s.datetime -lt $to) {
                 $s.delete = $false
-                $s.why += "H"
+                $s.why.Add("Hourly") | Out-Null
                 break
             }
         }
@@ -74,7 +75,7 @@ function Main {
         foreach ($s in $shadows) {
             if ($from -le $s.datetime -and $s.datetime -lt $to) {
                 $s.delete = $false
-                $s.why += "D"
+                $s.why.Add("Daily") | Out-Null
                 break
             }
         }
@@ -88,7 +89,7 @@ function Main {
         foreach ($s in $shadows) {
             if ($from -le $s.datetime -and $s.datetime -lt $to) {
                 $s.delete = $false
-                $s.why += "W"
+                $s.why.Add("Weekly") | Out-Null
                 break
             }
         }
@@ -102,7 +103,7 @@ function Main {
         foreach ($s in $shadows) {
             if ($from -le $s.datetime -and $s.datetime -lt $to) {
                 $s.delete = $false
-                $s.why += "M"
+                $s.why.Add("Monthly") | Out-Null
                 break
             }
         }
@@ -116,23 +117,27 @@ function Main {
         foreach ($s in $shadows) {
             if ($from -le $s.datetime -and $s.datetime -lt $to) {
                 $s.delete = $false
-                $s.why += "Y"
+                $s.why.Add("Yearly") | Out-Null
                 break
             }
         }
     }
 
-    # Delete shadow copies
+    # What if
     $deleted = 0
     if ($WhatIf) {
         foreach ($s in $shadows) {
-            "$($s.id) @ $($s.datetime.ToShortDateString()) $($s.datetime.ToShorttimeString()) -> Delete: $($s.delete) ($($s.why))"
+            if ($s.why) { $why = "[$($s.why -join ", ")]" } else { $why = "" }
+            if ($s.delete) { $action = "Delete" } else { $action = "Keep $why" }
+            "$Drive @ $(DTFormat $s.datetime) -> $action"
         }
     }
+
+    # Delete shadow copies
     else {
         foreach ($s in $shadows) {
             if ($s.delete) {
-                Log "Deleting shadow copy from $($s.datetime.ToShortDateString()) $($s.datetime.ToShorttimeString())" Yellow
+                Log "Deleting shadow copy from $(DTFormat)" Yellow
                 vssadmin delete shadows /shadow=$($s.id) /quiet | Out-Null
                 $deleted++
             }
@@ -153,8 +158,11 @@ function Main {
 
 function Log ($Message, [System.ConsoleColor]$ForegroundColor = 7 ) {
     Write-Host $Message -ForegroundColor $ForegroundColor
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm"
-    "$timestamp $Message" | Out-File $PSCommandPath.Replace(".ps1", ".log") -Append
+    "$(DTFormat) $Message" | Out-File $PSCommandPath.Replace(".ps1", ".log") -Append
+}
+
+function DTFormat ([datetime]$datetime = $(Get-Date)) {
+    Get-Date -Date $datetime -Format "yyyy-MM-dd HH:mm"
 }
 
 Main
