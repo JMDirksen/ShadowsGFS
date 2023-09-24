@@ -9,41 +9,9 @@
     [switch]$WhatIf
 )
 
-if ($Drive.Length -eq 1) { $Drive = $Drive + ":" }
-$Drive = $Drive.ToUpper()
-if ($Drive -cnotmatch "^[A-Z]:$") { throw "Invalid drive `"$Drive`"" }
-
 function Main {
-
-    # Build list of shadow copies
-    [array]$output = vssadmin list shadows /for=$Drive
-    if (-not $?) {
-        Log $output[3].Split(".")[0] Red
-        exit
-    }
-
-    $shadows = [System.Collections.ArrayList]@()
-    $shadow = @{}
-    foreach ($line in $output) {
-        $line = $line.Trim()
-        if ($line -clike "*shadow copies at creation time:*") {
-            $datetime = [DateTime]::ParseExact($line.Split()[7..8] -join " ", "d-M-yyyy HH:mm:ss", $null)
-        }
-        elseif ($line -clike "Shadow Copy ID:*") {
-            if ($shadow.id) {
-                $shadows.Add($shadow) | Out-Null
-                $shadow = @{}
-            }
-            $id = $line.Split()[3]
-            $shadow.id = $id
-            $shadow.datetime = $datetime
-            $shadow.delete = $true
-            $shadow.why = [System.Collections.ArrayList]@()
-        }
-    }
-    if ($shadow.id) {
-        $shadows.Add($shadow) | Out-Null
-    }
+    $Drive = Format-DriveLetter $Drive
+    $shadows = Get-VssAdminShadows $Drive
 
     # Keep last x copies
     for ($x = - $KeepLast; $x -lt 0; $x++) {
@@ -145,15 +113,56 @@ function Main {
     }
 
     # Show info
-    [array]$output = vssadmin list shadowstorage /on=$Drive
+    $storage = Get-VssAdminStorage $Drive
+    Log ("Drive {0} has {1} shadow copies using {2} ({3}) of space" -f $Drive, ($shadows.Count - $deleted), $storage.Size, $storage.Percentage) Green
+}
+
+function Format-DriveLetter ([string]$Drive) {
+    if ($Drive.Length -eq 1) { $Drive = $Drive + ":" }
+    $Drive = $Drive.ToUpper()
+    if ($Drive -cnotmatch "^[A-Z]:$") { throw "Invalid drive `"$Drive`"" }
+    return $Drive
+}
+
+function Get-VssAdminShadows ([string]$Drive) {
+    [array]$output = vssadmin list shadows /for=$Drive
+    if (-not $?) {
+        Log $output[3].Split(".")[0] Red
+        exit
+    }
+
+    $shadows = [System.Collections.ArrayList]@()
+    $shadow = @{}
     foreach ($line in $output) {
         $line = $line.Trim()
-        if ($line -clike "Allocated Shadow Copy Storage space:*") {
-            $allocatedSpace = ($line.Split()[5..7] -join " ").replace(",", ".")
+        if ($line -clike "*shadow copies at creation time:*") {
+            $datetime = [DateTime]::ParseExact($line.Split()[7..8] -join " ", "d-M-yyyy HH:mm:ss", $null)
+        }
+        elseif ($line -clike "Shadow Copy ID:*") {
+            if ($shadow.id) {
+                $shadows.Add($shadow) | Out-Null
+                $shadow = @{}
+            }
+            $id = $line.Split()[3]
+            $shadow.id = $id
+            $shadow.datetime = $datetime
+            $shadow.delete = $true
+            $shadow.why = [System.Collections.ArrayList]@()
         }
     }
-    Log "Drive $Drive has $($shadows.Count - $deleted) shadow copies using $allocatedSpace of space" Green
+    if ($shadow.id) {
+        $shadows.Add($shadow) | Out-Null
+    }
 
+    return $shadows
+}
+
+function Get-VssAdminStorage ([string]$Drive) {
+    [array]$output = vssadmin list shadowstorage /on=$Drive
+    $line = ($output | Where-Object { $_ -like "*Allocated Shadow Copy Storage space:*" }).Trim()
+    $size = ($line.Split()[5..6] -join " ").replace(",", ".")
+    $percentage = $line.Split()[7].replace("(", "").replace(")", "")
+    return @{"Size" = $size; "Percentage" = $percentage }
 }
 
 function Log ($Message, [System.ConsoleColor]$ForegroundColor = 7 ) {
