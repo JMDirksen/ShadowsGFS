@@ -105,7 +105,7 @@ function Main {
     else {
         foreach ($s in $shadows) {
             if ($s.delete) {
-                Log "Deleting shadow copy from $(DTFormat)" Yellow
+                Log "Deleting shadow copy from $(DTFormat $s.datetime)" Yellow
                 vssadmin delete shadows /shadow=$($s.id) /quiet | Out-Null
                 $deleted++
             }
