@@ -11,7 +11,7 @@
 
 function Main {
     $Drive = Format-DriveLetter $Drive
-    $shadows = Get-VssAdminShadows $Drive
+    $shadows = @(Get-VssAdminShadows $Drive)
 
     # Keep last x copies
     for ($x = - $KeepLast; $x -lt 0; $x++) {
