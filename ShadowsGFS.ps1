@@ -106,8 +106,9 @@ function Main {
         foreach ($s in $shadows) {
             if ($s.delete) {
                 Log "Deleting shadow copy from $(DTFormat $s.datetime)" Yellow
-                vssadmin delete shadows /shadow=$($s.id) /quiet | Out-Null
-                $deleted++
+                $output = vssadmin delete shadows /shadow=$($s.id) /quiet
+                if ($LASTEXITCODE -eq 0) { $deleted++ }
+                else { Log "Error $LASTEXITCODE - $output" Red }
             }
         }
     }
@@ -139,15 +140,17 @@ function Get-VssAdminShadows ([string]$Drive) {
             $datetime = [DateTime]::ParseExact($line.Split()[7..8] -join " ", "d-M-yyyy HH:mm:ss", $null)
         }
         elseif ($line -clike "Shadow Copy ID:*") {
-            if ($shadow.id) {
-                $shadows.Add($shadow) | Out-Null
-                $shadow = @{}
-            }
             $id = $line.Split()[3]
             $shadow.id = $id
             $shadow.datetime = $datetime
             $shadow.delete = $true
             $shadow.why = [System.Collections.ArrayList]@()
+        }
+        elseif ($line -eq "Type: ClientAccessible") {
+            if ($shadow.id) {
+                $shadows.Add($shadow) | Out-Null
+                $shadow = @{}
+            }
         }
     }
     if ($shadow.id) {
